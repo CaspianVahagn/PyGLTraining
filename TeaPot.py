@@ -63,7 +63,7 @@ def resizing(width, height):
 
 
 def mouseFun(button, state, x ,y):
-    pass
+    print x,y
 
 
 def main():
@@ -71,14 +71,14 @@ def main():
     glutInit(sys.argv)
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
     glutInitWindowSize(500,500)
-
+    from OpenGL import GLUT
     glutCreateWindow("TEAPOT")
     glutReshapeFunc(resizing)
     glutDisplayFunc(display)
     glutKeyboardFunc(keyPressed)
     glutIdleFunc(animation)
 
-   # glutMouseFunc(CMPFUNC(mouseFun))
+    GLUT.glutMouseFunc(mouseFun)
     initGL(500, 500)
     glutMainLoop()
 
