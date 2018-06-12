@@ -2,169 +2,175 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from OpenGL.GL import *
 from OpenGL.arrays import vbo
-from numpy import array
-import numpy
+import numpy as np
 import sys, math, os
 
-EXIT = -1
-FIRST = 0
 
-width = None
-height = None
+
+
+WIDTH = None
+HEIGHT = None
 aktY = None
 shadow = True
+scale_trans = 1
 
-COLOR = (1.0,1.0,1.0)
+COLOR = (1.0, 1.0, 1.0)
 BACKGROUNDCOLOR = (0.2, 0.0, 0.8, 0.5)
-punkte = {}
-dreiecke = []
-data = []
-normalen = {}
-myvbo = None
+points = {}
+triangles = []
+vertex_data = []
+normals = {}
+_vbo = None
 
 degree = 0
-lightPos = [0.0,5.0,0.0]
+light = [3.0, 1600.0, 0.0]
+x_pos = None
+y_pos = None
+pos = [0, 0, 0]
+y_foot = None
 
+translate = False
 angle = 0
-axis = numpy.array([1.,1.,1.])
+axis = np.array([1., 1., 1.])
 scaleFactor = None
-startP = numpy.array([0.,0.,0.,0.])
-actOri = numpy.array([[1.,0.,0.,0.],
-                      [0.,1.,0.,0.],
-                      [0.,0.,1.,0.],
-                      [0.,0.,0.,1.]])
+startP = np.array([0., 0., 0., 0.])
+orientation = np.array([[1., 0., 0., 0.],
+                           [0., 1., 0., 0.],
+                           [0., 0., 1., 0.],
+                           [0., 0., 0., 1.]])
 doRotation = False
-actSc = numpy.array([[1.,0.,0.,0.],
-                      [0.,1.,0.,0.],
-                      [0.,0.,1.,0.],
-                      [0.,0.,0.,1.]])
+scaling = np.array([[1., 0., 0., 0.],
+                       [0., 1., 0., 0.],
+                       [0., 0., 1., 0.],
+                       [0., 0., 0., 1.]])
 scalefac = 1
-isOrtho = True
-actX = None
-actY = None
-pos = [0,0,0]
-minY = None
+orthogonal_projection = True
 
-doTrans = False
+EXIT = -1
 
-def sub(a,b):
+def sub(a, b):
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 
-    return[a[0]-b[0],a[1]-b[1],a[2]-b[2]]
+
+def reset():
+    global _vbo, triangles, vertex_data, normals, points
+    points = {}
+    triangles = []
+    vertex_data = []
+    normals = {}
+    _vbo = None
 
 def einlese(pfad):
-
-    global myvbo
+    global _vbo
     lines = open(pfad).read().split("\n")
-
-
-    counter = 1
-    counterN = 1
+    reset()
+    p_count = 1
+    n_count = 1
     for ele in lines:
         line = ele.split()
         if "".join(ele).strip():
             if (line[0] == "v"):
-                punkte[counter] = [float(line[1]),float(line[2]),float(line[3])]
-                counter+=1
+                points[p_count] = [float(v) for v in line[1:4]]
+                p_count += 1
             elif (line[0] == "vn"):
-
-                a = (float(line[1]))
-                b = (float(line[2]))
-                c = (float(line[3]))
-
-                normalen[counterN] = [a,b,c]
-                counterN+=1
+                a,b,c = [float(v) for v in line[1:4]]
+                normals[n_count] = [a, b, c]
+                n_count += 1
             elif (line[0] == "f"):
                 if "//" not in line[1]:
-                    a = int(line[1])
-                    b = int(line[2])
-                    c = int(line[3])
-                    na = numpy.cross(sub(punkte[c],punkte[a]),sub(punkte[b],punkte[a]))
+
+                    a,b,c = [int(v) for v in line[1:4]]
+                    na = np.cross(sub(points[c], points[a]), sub(points[b], points[a]))
                     na = [abs(x) for x in list(na)]
-                    nb = numpy.cross(sub(punkte[c], punkte[b]), sub(punkte[a], punkte[b]))
+                    nb = np.cross(sub(points[c], points[b]), sub(points[a], points[b]))
                     nb = [abs(x) for x in list(nb)]
-                    nc = numpy.cross(sub(punkte[a], punkte[c]), sub(punkte[b], punkte[c]))
+                    nc = np.cross(sub(points[a], points[c]), sub(points[b], points[c]))
                     nc = [abs(x) for x in list(nc)]
-                    dreiecke.append([a,na])
-                    dreiecke.append([b,nb])
-                    dreiecke.append([c,nc])
+                    triangles.append([a, na])
+                    triangles.append([b, nb])
+                    triangles.append([c, nc])
 
                 else:
-                    lin1 = line[1].split("//")
-                    lin2 = line[2].split("//")
-                    lin3 = line[3].split("//")
-                    dreiecke.append((int(lin1[0]), int(lin1[1])))
-                    dreiecke.append((int(lin2[0]), int(lin2[1])))
-                    dreiecke.append((int(lin3[0]), int(lin3[1])))
+                    kanten = [ x.split("//") for x in line[1:4]]
+                    triangles.append((int(kanten[0][0]), int(kanten[0][1])))
+                    triangles.append((int(kanten[1][0]), int(kanten[1][0])))
+                    triangles.append((int(kanten[2][0]), int(kanten[2][0])))
 
-    for ele in dreiecke:
+    for ele in triangles:
         if type(ele) is list:
-            data.append(punkte[ele[0]]+ele[1])
+            vertex_data.append(points[ele[0]] + ele[1])
         else:
-            #print(ele)
-            data.append(punkte[ele[0]]+ normalen[ele[1]])
+            # print(ele)
+            vertex_data.append(points[ele[0]] + normals[ele[1]])
+
+    _vbo = vbo.VBO(np.array(vertex_data, 'f'))
+    global scale_trans
+    scale_trans = maxlen(bounding_box())
+    translate_y()
 
 
-    myvbo = vbo.VBO(numpy.array(data, 'f'))
+def init():
+    """ Initialize an OpenGL window """
+    global orthogonal_projection
+    glClearColor(BACKGROUNDCOLOR[0], BACKGROUNDCOLOR[1], BACKGROUNDCOLOR[2], BACKGROUNDCOLOR[3])  # background color
+    glMatrixMode(GL_PROJECTION)  # switch to projection matrix
+    glLoadIdentity()  # set to 1
 
-    verschiebungY()
+    glOrtho(-1.5, 1.5, -1.5, 1.5, -1.0, 1.0)  # multiply with new p-matrix
 
+    glMatrixMode(GL_MODELVIEW)
 
-def init(width, height):
-   """ Initialize an OpenGL window """
-   global isOrtho
-   glClearColor(BACKGROUNDCOLOR[0],BACKGROUNDCOLOR[1],BACKGROUNDCOLOR[2],BACKGROUNDCOLOR[3])         #background color
-   glMatrixMode(GL_PROJECTION)              #switch to projection matrix
-   glLoadIdentity()                         #set to 1
+    glEnable(GL_LIGHTING)
+    glEnable(GL_LIGHT0)
+    glEnable(GL_DEPTH_TEST)
+    glEnable(GL_NORMALIZE)
+    glEnable(GL_COLOR_MATERIAL)
 
-   glOrtho(-1.5, 1.5, -1.5, 1.5, -1.0, 1.0) #multiply with new p-matrix
+    ambient = [0.15, 0.15, 0.15, 1.0]
+    diffuse = [0.6, 0.6, 0.6, 1.0]
+    specular = [0.1, 0.1, 0.1, 1.0]
 
-   glMatrixMode(GL_MODELVIEW)               #switch to modelview matrix
-
-   glEnable(GL_LIGHTING)
-   glEnable(GL_LIGHT0)
-   glEnable(GL_DEPTH_TEST)
-   glEnable(GL_NORMALIZE)
-   glEnable(GL_COLOR_MATERIAL)
-
-   ambient = [0.15,0.15,0.15,1.0]
-   diffuse = [0.6,0.6,0.6,1.0]
-   specular = [0.1,0.1,0.1,1.0]
-   #lightPos = [0.0,0,1.0,0]
-
-   glLightfv(GL_LIGHT0,GL_AMBIENT,ambient)
-   glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse)
-   glLightfv(GL_LIGHT0, GL_SPECULAR, specular)
-   glLightfv(GL_LIGHT0, GL_POSITION, lightPos)
-
-def verschiebungY():
-
-    global minY
-
-    minimax = maxmin()
-    minY = minimax[1][1]
+    glLightfv(GL_LIGHT0, GL_AMBIENT, ambient)
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse)
+    glLightfv(GL_LIGHT0, GL_SPECULAR, specular)
+    glLightfv(GL_LIGHT0, GL_POSITION, light)
 
 
-
-def maxmin():
-
-    mini = (min(list(map(lambda x: x[0],punkte.values()))),min(list(map(lambda x: x[1],punkte.values()))),min(list(map(lambda x: x[2],punkte.values()))))
-    maxi = (max(list(map(lambda x: x[0], punkte.values()))), max(list(map(lambda x: x[1], punkte.values()))), max(list(map(lambda x: x[2], punkte.values()))))
-
-    global minY
+def translate_y():
+    global y_foot
+    y_foot = bounding_box()[1][1]
 
 
-    minY = mini[1]
+def bounding_box():
+    global y_foot
 
-    return[maxi,mini]
+    min_values = (
+        min(list(map(lambda x: x[0], points.values()))),
+        min(list(map(lambda x: x[1], points.values()))),
+        min(list(map(lambda x: x[2], points.values())))
+    )
+
+    max_values = (
+            max(list(map(lambda x: x[0], points.values()))),
+            max(list(map(lambda x: x[1], points.values()))),
+            max(list(map(lambda x: x[2], points.values())))
+            )
+
+
+
+    y_foot = min_values[1]
+
+    return [max_values, min_values]
+
 
 def maxlen(maxmin):
+    return max([(x - y) for x in maxmin[0] for y in maxmin[1]])
 
-    return max([(x-y) for x in maxmin[0] for y in maxmin[1]])
 
 def scaleMax():
-    max = maxlen(maxmin())
+    max = maxlen(bounding_box())
     glScalef(1 / max, 1 / max, 1 / max)
-    actSc = numpy.array([[1 / max, 0., 0., 0.],
+    actSc = np.array([[1 / max, 0., 0., 0.],
                          [0., 1 / max, 0., 0.],
                          [0., 0., 1 / max, 0.],
                          [0., 0., 0., 1.]])
@@ -172,319 +178,354 @@ def scaleMax():
 
 
 def scale():
-
-    glScalef(scalefac,scalefac,scalefac)
-    actSc = numpy.array([[scalefac, 0., 0., 0.],
-                        [0., scalefac, 0., 0.],
-                        [0., 0., scalefac, 0.],
-                        [0., 0., 0., 1.]])
+    glScalef(scalefac, scalefac, scalefac)
+    actSc = np.array([[scalefac, 0., 0., 0.],
+                         [0., scalefac, 0., 0.],
+                         [0., 0., scalefac, 0.],
+                         [0., 0., 0., 1.]])
 
     return actSc
 
-def mittelpunkt():
 
-    werte = maxmin()
-
-    x = float((werte[0][0]) - (werte[1][0])) /2 + werte[1][0]
-    y= float((werte[0][1]) - (werte[1][1])) / 2 + werte[1][1]
+def get_center():
+    werte = bounding_box()
+    x = float((werte[0][0]) - (werte[1][0])) / 2 + werte[1][0]
+    y = float((werte[0][1]) - (werte[1][1])) / 2 + werte[1][1]
     z = float((werte[0][2]) - (werte[1][2])) / 2 + werte[1][2]
-
-    return (x,y,z)
+    return (x, y, z)
 
 
 def rotate():
-    mp = mittelpunkt()
+    mp = get_center()
     global degree
     degree += math.pi / 8
-    glRotatef(degree,mp[0],mp[1],mp[2])
+    glRotatef(degree, mp[0], mp[1], mp[2])
+
 
 def rotate(angle, axis):
-    c,mc = math.cos(angle),1-math.cos(angle)
+    c, mc = math.cos(angle), 1 - math.cos(angle)
     s = math.sin(angle)
-    l = math.sqrt(numpy.dot(numpy.array(axis),numpy.array(axis)))
-    x,y,z = numpy.array(axis)/l
-    r = numpy.matrix(
-        [[x*x*mc+c, x*y*mc-z*s,x*z*mc+y*s,0],
-         [x*y*mc+z*s, y*y*mc+c, y*z*mc-x*s, 0],
-         [x*z*mc-y*s, y*z*mc+x*s, z*z*mc+c, 0],
-         [0, 0 ,0 , 1]]
+    l = math.sqrt(np.dot(np.array(axis), np.array(axis)))
+    x, y, z = np.array(axis) / l
+    r = np.matrix(
+        [
+         [x * x * mc + c, x * y * mc - z * s, x * z * mc + y * s, 0],
+         [x * y * mc + z * s, y * y * mc + c, y * z * mc - x * s, 0],
+         [x * z * mc - y * s, y * z * mc + x * s, z * z * mc + c, 0],
+         [0, 0, 0, 1]
+         ]
     )
 
     return r.transpose()
 
-def projectOnSphere(x,y,r):
-    x,y = x-width / 2.0, height/2.0-y
-    a = min(r*r,x**2 + y**2)
-    z = math.sqrt(r*r - a)
-    l = math.sqrt(x**2 + y**2 + z**2)
-    return x/l, y/l, z/l
 
+def projectOnSphere(x, y, r):
+    x, y = x - WIDTH / 2.0, HEIGHT / 2.0 - y
+    a = min(r * r, x ** 2 + y ** 2)
+    z = math.sqrt(r * r - a)
+    l = math.sqrt(x ** 2 + y ** 2 + z ** 2)
+    return x / l, y / l, z / l
 
 
 def display():
-   global myvbo,lightPos
+    global _vbo, light
 
-   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT ) #clear screen
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)  # clear screen
 
-   glClearColor(BACKGROUNDCOLOR[0], BACKGROUNDCOLOR[1], BACKGROUNDCOLOR[2], BACKGROUNDCOLOR[3])
+    glClearColor(BACKGROUNDCOLOR[0], BACKGROUNDCOLOR[1], BACKGROUNDCOLOR[2], BACKGROUNDCOLOR[3])
 
-   glPolygonMode(GL_FRONT_AND_BACK,GL_FILL)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-   glLoadIdentity()
+    glLoadIdentity()
 
-   scaleMax() #skalieren auf -1 bis 1
-   mp = mittelpunkt()
+    scaleMax()  # skalieren auf -1 bis 1
+    mp = get_center()
 
-   glTranslate(-mp[0], -mp[1], -mp[2])
+    glTranslate(-mp[0], -mp[1], -mp[2])
 
+    glMultMatrixf(orientation * rotate(angle, axis))  # rotate
+    glTranslate(pos[0], pos[1], pos[2])  # move position
 
-   glMultMatrixf(actOri * rotate(angle, axis)) #rotate
-   glTranslate(pos[0], pos[1], pos[2]) #move position
+    scale()  # scale um scaleFac
 
-   scale() #scale um scaleFac
+    _vbo.bind()
 
+    glEnableClientState(GL_VERTEX_ARRAY)
+    glEnableClientState(GL_NORMAL_ARRAY)
+    glVertexPointer(3, GL_FLOAT, 24, _vbo)
+    glNormalPointer(GL_FLOAT, 24, _vbo + 12)
+    glColor3f(COLOR[0], COLOR[1], COLOR[2])
+    glDrawArrays(GL_TRIANGLES, 0, len(vertex_data))
 
-   myvbo.bind()
+    _vbo.unbind()
 
-   glEnableClientState(GL_VERTEX_ARRAY)
-   glEnableClientState(GL_NORMAL_ARRAY)
-   glVertexPointer(3,GL_FLOAT,24,myvbo)
-   glNormalPointer(GL_FLOAT,24,myvbo+12)
-   glColor3f(COLOR[0], COLOR[1], COLOR[2])
-   glDrawArrays(GL_TRIANGLES, 0, len(data))
+    glDisableClientState(GL_VERTEX_ARRAY)
+    glDisableClientState(GL_NORMAL_ARRAY)
 
-   myvbo.unbind()
+    if shadow:
+        calcShadow()
 
-
-   glDisableClientState(GL_VERTEX_ARRAY)
-   glDisableClientState(GL_NORMAL_ARRAY)
-
-
-   if shadow:
-
-       p = [1.0, 0., 0., 0., 0., 1.0, 0., -1.0 / lightPos[1], 0., 0., 1.0, 0., 0., 0., 0., 0.]
-       glDisable(GL_LIGHTING)
-
-       myvbo.bind()
-
-       glColor3f(0., 0., 0.)
-
-       glEnableClientState(GL_VERTEX_ARRAY)
-       glEnableClientState(GL_NORMAL_ARRAY)
-
-       glVertexPointer(3, GL_FLOAT, 24, myvbo)
-       glNormalPointer(GL_FLOAT, 24, myvbo + 12)
-
-       glLoadIdentity()
-       scaleMax()# skalieren auf -1 bis 1
-       glTranslate(0, minY, 0)
-       mp = mittelpunkt()
-
-       glTranslate(-mp[0], -mp[1], -mp[2])
-       #
-       glTranslate(pos[0], pos[1], pos[2])  # move position
-       scale()  # scale um scaleFac
+    glutSwapBuffers()
 
 
-       glTranslatef(lightPos[0],lightPos[1],lightPos[2])
+def calcShadow():
+    global _vbo, light
+    p = [1.0, 0., 0., 0., 0., 1.0, 0., -1.0 / light[1], 0., 0., 1.0, 0., 0., 0., 0., 0.]
+    glDisable(GL_LIGHTING)
 
-       glMultMatrixf(p)
+    _vbo.bind()
 
-       glTranslatef(-lightPos[0], -lightPos[1], -lightPos[2])
+    glColor3f(0., 0., 0.)
 
+    glEnableClientState(GL_VERTEX_ARRAY)
+    glEnableClientState(GL_NORMAL_ARRAY)
 
-       glMultMatrixf(actOri * rotate(angle, axis))  # rotate
+    glVertexPointer(3, GL_FLOAT, 24, _vbo)
+    glNormalPointer(GL_FLOAT, 24, _vbo + 12)
 
+    glLoadIdentity()
+    scaleMax()
+    glTranslate(0, y_foot, 0)
+    mp = get_center()
 
-       glDrawArrays(GL_TRIANGLES, 0, len(data))
+    glTranslate(-mp[0], -mp[1], -mp[2])
+    #
+    glTranslate(pos[0], 0, pos[2])  # move position
+    scale()  # scale um scaleFac
+    glTranslatef(light[0], light[1], light[2])
 
-       myvbo.unbind()
-       glEnable(GL_LIGHTING)
+    glMultMatrixf(p)
 
-       glDisableClientState(GL_VERTEX_ARRAY)
-       glDisableClientState(GL_NORMAL_ARRAY)
+    glTranslatef(-light[0], -light[1], -light[2])
+
+    glMultMatrixf(orientation * rotate(angle, axis))  # rotate
+
+    glDrawArrays(GL_TRIANGLES, 0, len(vertex_data))
+
+    _vbo.unbind()
+    glEnable(GL_LIGHTING)
+
+    glDisableClientState(GL_VERTEX_ARRAY)
+    glDisableClientState(GL_NORMAL_ARRAY)
 
 
 
+def resize(width, height):
+    if height == 0:
+        height = 1
+    glViewport(0, 0, width, height)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    if orthogonal_projection == True:
+        if width <= height:
+            glOrtho(-1.5, 1.5,
+                    -1.5 * height / width, 1.5 * height / width,
+                    -1.0, 1.0)
+        else:
+            glOrtho(-1.5 * width / height, 1.5 * width / height,
+                    -1.5, 1.5,
+                    -1.0, 1.0)
+    else:
+        gluPerspective(45., float(width) / height, 0.01, 50.)
+        gluLookAt(0, 0, 4, 0, 0, 0, 0, 1, 0)
 
-   glutSwapBuffers()            #swap buffer
-
-
-
-def reshape(width, height):
-   """ adjust projection matrix to window size"""
-   if height == 0:
-       height = 1
-   glViewport(0, 0, width, height)
-   glMatrixMode(GL_PROJECTION)
-   glLoadIdentity()
-   if isOrtho == True:
-       if width <= height:
-           glOrtho(-1.5, 1.5,
-                   -1.5*height/width, 1.5*height/width,
-                   -1.0, 1.0)
-       else:
-           glOrtho(-1.5*width/height, 1.5*width/height,
-                   -1.5, 1.5,
-                   -1.0, 1.0)
-   else:
-       gluPerspective(45., float(width) / height, 0.01, 50.)
-       gluLookAt(0, 0, 4, 0, 0, 0, 0, 1, 0)
-       #gluLookAt(0, 0, -3, 0, 0, 500, 0, 1, 0)
-
-   glMatrixMode(GL_MODELVIEW)
-   glutSwapBuffers()
+    glMatrixMode(GL_MODELVIEW)
+    glutSwapBuffers()
 
 
-def keyPressed(key, x, y):
-   """ handle keypress events """
+def key_event(key, x, y):
 
-   global COLOR,isOrtho,BACKGROUNDCOLOR,shadow
-   if key == chr(27): # chr(27) = ESCAPE
-       sys.exit()
-   elif key == "g":
-       COLOR = 0.0,1.0,0.0
-       glutPostRedisplay()
-   elif key == "s":
-       COLOR = 0.0, 0.0, 0.0
-       glutPostRedisplay()
-   elif key == "w":
-       COLOR = 1.0, 1.0, 1.0
-       glutPostRedisplay()
-   elif key == "b":
-       COLOR = 0.0, 0.0, 1.0
-       glutPostRedisplay()
-   elif key == "r":
-       COLOR = 1.0,0.0,0.0
-       glutPostRedisplay()
-   elif key == "R":
-       BACKGROUNDCOLOR = (1.0, 0.0, 0.0,0.5)
-       glutPostRedisplay()
-   elif key == "G":
-       BACKGROUNDCOLOR = (0.0, 1.0, 0.0,0.5)
-       glutPostRedisplay()
-   elif key == "S":
-       BACKGROUNDCOLOR = (0.0, 0.0, 0.0,0.5)
-       glutPostRedisplay()
-   elif key == "W":
-       BACKGROUNDCOLOR = (1.0, 1.0, 1.0,0.5)
-       glutPostRedisplay()
-   elif key == "B":
-       BACKGROUNDCOLOR = (0.0, 0.0, 1.0,0.5)
-       glutPostRedisplay()
-   elif key == "o":
-       isOrtho = True
-       reshape(width,height)
-       glutPostRedisplay()
-   elif key == "p":
-       isOrtho = False
-       reshape(width,height)
-       glutPostRedisplay()
-   elif key =="h":
-       if(shadow == True):
-           shadow = False
-       else:
-           shadow = True
-       glutPostRedisplay()
+    def exit():
+        sys.exit()
 
+    def yellow():
+        global COLOR
+        COLOR = 1.0, 1.0, 0.0
 
-def mouse(button, state, x, y):
-   """ handle mouse events """
-   global aktY,startP,actOri,angle,doRotation,pos,actX,actY,doTrans
-   r = min(width,height)/2.0
-   if button == GLUT_LEFT_BUTTON:
-       if state == GLUT_DOWN:
-           doRotation = True
-           startP = projectOnSphere(x,y,r)
-       if state == GLUT_UP:
-           doRotation = False
-           actOri = actOri*rotate(angle,axis)
-           angle = 0
+    def black():
+        global COLOR
+        COLOR = 0.0, 0.0, 0.0
 
-   elif button == 3:
-       global scalefac
-       scalefac += 0.05
-       glutPostRedisplay()
-   elif button == 4:
-       scalefac -= 0.05
-       glutPostRedisplay()
+    def white():
+        global COLOR
+        COLOR = 1.0, 1.0, 1.0
 
-   elif button == GLUT_RIGHT_BUTTON:
-       actX = x
-       actY = y
-       if state == GLUT_DOWN:
-           doTrans = True
+    def red():
+        global COLOR
+        COLOR = 1.0, 0.0, 0.0
 
-       elif state == GLUT_UP:
-           doTrans = False
+    def blue():
+        global COLOR
+        COLOR = 0.0, 0.0, 1.0
 
-def mouseMotion(x,y):
-   """ handle mouse motion """
-   global angle,axis,scaleFactor,actX,actY,pos
-   if doRotation:
-       r = min(width,height)/2.0
-       moveP = projectOnSphere(x,y,r)
-       angle = math.acos(numpy.dot(startP,moveP))
-       axis = numpy.cross(startP,moveP)
-       glutPostRedisplay()
+    def bgred():
+        global BACKGROUNDCOLOR
+        BACKGROUNDCOLOR = (1.0, 0.0, 0.0, 0.5)
 
-   elif doTrans:
-       scaleX = float(width)/2.0
-       scaleY = float(height)/2.0
-       diff_x = x - actX
-       diff_y = actY -y
-       pos[0] = diff_x/scaleX
-       pos[1] = diff_y/scaleY
-       glutPostRedisplay()
+    def bgyellow():
+        global BACKGROUNDCOLOR
+        BACKGROUNDCOLOR = (1.0, 1.0, 0.0, 0.5)
+
+    def bgblue():
+        global BACKGROUNDCOLOR
+        BACKGROUNDCOLOR = (0.0, 0.0, 1.0, 0.5)
+
+    def bgblack():
+        global BACKGROUNDCOLOR
+        BACKGROUNDCOLOR = (.0, .0, .0, 0.5)
+
+    def bgwhite():
+        global BACKGROUNDCOLOR
+        BACKGROUNDCOLOR = (1.0, 1.0, 1.0, 0.5)
+
+    def orthogonal():
+        global orthogonal_projection
+        orthogonal_projection = True
+        resize(WIDTH, HEIGHT)
+
+    def central():
+        global orthogonal_projection
+        orthogonal_projection = False
+        resize(WIDTH, HEIGHT)
+
+    def setshading():
+        global shadow
+        shadow = not shadow
+
+    commands= {
+        chr(27): exit,
+        'g' : yellow,
+        's' : black,
+        'w' : white,
+        'r' : red,
+        'b' : blue,
+        'R' : bgred,
+        'G' : bgyellow,
+        'B' : bgblue,
+        'S' : bgblack,
+        'W' : bgwhite,
+        'o' : orthogonal,
+        'p' : central,
+        'h' : setshading
+    }
+
+    func = commands.get(key, lambda: "no mapping")
+    func()
+    glutPostRedisplay()
 
 
 
 
-def menu_func(value):
-   """ handle menue selection """
-   if value == EXIT:
-       sys.exit()
-   glutPostRedisplay()
+
+def mouse_action(button, state, x, y):
+    """ handle mouse events """
+    global aktY, startP, orientation, angle, doRotation, pos, x_pos, y_pos, translate
+    r = min(WIDTH, HEIGHT) / 2.0
+    if button == GLUT_LEFT_BUTTON:
+        if state == GLUT_DOWN:
+            doRotation = True
+            startP = projectOnSphere(x, y, r)
+        if state == GLUT_UP:
+            doRotation = False
+            orientation = orientation * rotate(angle, axis)
+            angle = 0
+
+    elif button == 3:
+        global scalefac
+        scalefac += 0.05
+        glutPostRedisplay()
+    elif button == 4:
+        scalefac -= 0.05
+        glutPostRedisplay()
+
+    elif button == GLUT_RIGHT_BUTTON:
+        x_pos = x
+        y_pos = y
+        if state == GLUT_DOWN:
+            translate = True
+
+        elif state == GLUT_UP:
+            translate = False
+
+
+def mouse_move(x, y):
+    """ handle mouse motion """
+    global angle, axis, scaleFactor, x_pos, y_pos, pos, scale_trans
+    if doRotation:
+        r = min(WIDTH, HEIGHT) / 2.0
+        moveP = projectOnSphere(x, y, r)
+        angle = math.acos(np.dot(startP, moveP))
+        axis = np.cross(startP, moveP)
+        glutPostRedisplay()
+
+    elif translate:
+        scaleX = float(WIDTH) / 2.0
+        scaleY = float(HEIGHT) / 2.0
+        delta_x = (x - x_pos) * scale_trans
+        delta_y = (y_pos - y) * scale_trans
+        pos = [(delta_x / scaleX), (delta_y / scaleY), pos[2]]
+        glutPostRedisplay()
+
+
+def option_menue(value):
+    
+
+    """ handle menue selection """
+    menuedic = {
+                0: "bunny.obj",
+                1: "elephant.obj",
+                2: "squirrel.obj",
+                3: "squirrel_ar.obj",
+                4: "cow.obj"
+                }
+
+    if value == EXIT:
+        sys.exit()
+
+    else:
+        einlese(menuedic[value])
+
+
 
 
 def main():
-   einlese("squirrel_ar.obj")
+    einlese("random.obj")
 
-   global height,width, aktY, actX, actY
-   width = 500
-   height = 500
-   actX = width/2.
-   actY = height/2.
-   aktY = height/2.
+    global HEIGHT, WIDTH, aktY, x_pos, y_pos
+    WIDTH = 500
+    HEIGHT = 500
+    x_pos = WIDTH / 2.
+    y_pos = HEIGHT / 2.
+    aktY = HEIGHT / 2.
+    cwd = os.getcwd()
+    glutInit(sys.argv)
+    os.chdir(cwd)
 
-   # Hack for Mac OS X
-   cwd = os.getcwd()
-   glutInit(sys.argv)
-   os.chdir(cwd)
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+    glutInitWindowSize(WIDTH, HEIGHT)
+    glutCreateWindow(b"simple openGL/GLUT template")
 
-   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
-   glutInitWindowSize(width, height)
-   glutCreateWindow(b"simple openGL/GLUT template")
+    glutDisplayFunc(display)
+    glutReshapeFunc(resize)
+    glutKeyboardFunc(key_event)
 
-   glutDisplayFunc(display)     #register display function
-   glutReshapeFunc(reshape)     #register reshape function
-   glutKeyboardFunc(keyPressed) #register keyboard function
+    glutMouseFunc(mouse_action)
+    glutMotionFunc(mouse_move)
+    glutCreateMenu(option_menue)
+    import ctypes as ct
+    glutAddMenuEntry("Bunny", 0)
+    glutAddMenuEntry("Elephant", 1)
+    glutAddMenuEntry("Squirrel", 2)
+    glutAddMenuEntry("Squirrel AR", 3)
+    glutAddMenuEntry("Cow", 4)
 
-   glutMouseFunc(mouse)         #register mouse function
-   glutMotionFunc(mouseMotion)  #register motion function
-   glutCreateMenu(menu_func)    #register menue function
+    glutAddMenuEntry("EXIT", EXIT)
+    glutAttachMenu(GLUT_MIDDLE_BUTTON)
 
+    init()  # initialize OpenGL state
 
-
-
-   glutAddMenuEntry("First Entry",FIRST) #Add a menu entry
-   glutAddMenuEntry("EXIT",EXIT)         #Add another menu entry
-   #glutAttachMenu(GLUT_RIGHT_BUTTON)     #Attach mouse button to menue
-
-   init(500,500) #initialize OpenGL state
-
-   glutMainLoop() #start even processing
+    glutMainLoop()  # start even processing
 
 
 if __name__ == "__main__":
-   main()
+    main()
